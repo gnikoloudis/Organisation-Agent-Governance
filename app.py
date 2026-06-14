@@ -1,5 +1,6 @@
 import streamlit as st
 from database.db_manager import init_db
+from modules import skills, rules, workflows, mcp, exporter # Add exporter
 
 # Import our new isolated modules
 from modules import skills, rules, workflows,mcp
@@ -19,8 +20,8 @@ CATEGORIES = {
     "Rules": rules,
     "Workflows": workflows,
     "MCP Services": mcp,
+    "Exporter": exporter # Add to menu
 }
-
 # Sidebar Navigation
 selected_category = st.sidebar.radio("Select Workspace", list(CATEGORIES.keys()))
 

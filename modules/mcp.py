@@ -1,29 +1,20 @@
 import streamlit as st
 import json
-import urllib.request
-import urllib.error
-from jsonschema import validate, ValidationError
-from database.db_manager import save_customization, get_customizations, delete_customization, update_customization
-
-MCP_SCHEMA = {
-    "type": "object",
-    "properties": {"mcpServers": {"type": "object", "patternProperties": {"^.*$": {"type": "object", "properties": {"command": {"type": "string"}, "args": {"type": "array", "items": {"type": "string"}}, "env": {"type": "object"}}, "required": ["command"]}}}},
-    "required": ["mcpServers"]
-}
+from core.mcp import create_mcp, update_mcp, delete_mcp, get_mcps
+from core.utils import fetch_remote_content
+from core.exceptions import AssetValidationError, AssetNotFoundError
 
 def perform_mcp_fetch(url_key, content_key):
-    """Callback: Fetches pure JSON securely."""
+    """Callback: Fetches pure JSON securely using core utilities."""
     url = st.session_state.get(url_key, "").strip()
     if not url:
         st.session_state[f"error_{url_key}"] = "Please enter a URL first."
         return
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            fetched_data = response.read().decode("utf-8")
-            json.loads(fetched_data) # Force validate JSON
-            if content_key: st.session_state[content_key] = fetched_data
-            st.session_state[f"error_{url_key}"] = None
+        fetched_data = fetch_remote_content(url)
+        json.loads(fetched_data) # Force validate JSON
+        if content_key: st.session_state[content_key] = fetched_data
+        st.session_state[f"error_{url_key}"] = None
     except json.JSONDecodeError:
         st.session_state[f"error_{url_key}"] = "❌ The fetched URL does not contain a valid JSON payload."
     except Exception as e:
@@ -57,7 +48,6 @@ def render():
         uploaded_file_name = None
 
         if storage_type == "Real File Upload":
-            # FIX: Restricted back to pure json
             uploaded_file = st.file_uploader("Choose JSON File", type=["json"], key="mcp_uploader", on_change=load_file_content)
             if uploaded_file is not None:
                 uploaded_file_bytes = uploaded_file.read()
@@ -92,36 +82,31 @@ def render():
         tags = st.text_input("Category Tags (comma-separated)", key="mcp_tags")
         
         if st.button("Save MCP Asset", type="primary"):
-            clean_tags = tags.lower().strip() if tags else ""
-            final_desc = description.strip()
-            if reference_url.strip(): final_desc += f"\n\n🔗 **Reference Bookmark:** [{reference_url.strip()}]({reference_url.strip()})"
-            final_desc = final_desc.strip()
-            
-            if not name: st.error("Please supply a valid item name.")
-            elif storage_type == "Web Bookmark" and not content: st.error("Please supply a valid URL for the bookmark.")
-            elif storage_type in ["JSON Config", "Real File Upload"]:
-                if not content.strip(): st.error("Please provide the JSON configuration.")
-                else:
-                    try:
-                        parsed_json = json.loads(content)
-                        validate(instance=parsed_json, schema=MCP_SCHEMA)
-                        save_customization("MCP Services", name, storage_type, content, uploaded_file_bytes, uploaded_file_name, final_desc, clean_tags)
-                        st.session_state.mcp_clear_form = True
-                        st.success("✅ Successfully validated and saved your MCP Service asset!")
-                        st.rerun()
-                    except json.JSONDecodeError as e: st.error(f"❌ **JSON Syntax Error** at **Line {e.lineno}**, Column {e.colno}:\n`{e.msg}`")
-                    except ValidationError as e:
-                        path = " -> ".join([str(p) for p in e.path]) if e.path else "Root Object"
-                        st.error(f"❌ **MCP Schema Error:**\n* **Location:** `{path}`\n* **Issue:** {e.message}")
-            else:
-                save_customization("MCP Services", name, storage_type, content, uploaded_file_bytes, uploaded_file_name, final_desc, clean_tags)
+            try:
+                create_mcp(
+                    name=name,
+                    storage_type=storage_type,
+                    content=content if storage_type != "Web Bookmark" else content.strip(),
+                    file_blob=uploaded_file_bytes,
+                    file_name=uploaded_file_name,
+                    description=description,
+                    tags=tags,
+                    reference_url=reference_url
+                )
                 st.session_state.mcp_clear_form = True
-                st.success("✅ Successfully saved your MCP Service asset!")
+                st.success("✅ Successfully validated and saved your MCP Service asset!")
                 st.rerun()
+            except AssetValidationError as e:
+                st.error(f"❌ {e}")
 
     with tab_view:
         st.subheader("Active Assets under MCP Services")
-        items = get_customizations(category="MCP Services")
+        try:
+            items = get_mcps()
+        except Exception as e:
+            st.error(f"Error loading MCP services: {e}")
+            items = []
+            
         if not items:
             st.info("No records found in this category yet.")
         else:
@@ -133,8 +118,11 @@ def render():
                         if item['tags']: st.markdown(" ".join([f"`{t.strip().lower()}`" for t in item['tags'].split(",") if t.strip()]))
                     with col2:
                         if st.button("🗑️ Delete", key=f"del_MCP_{item['id']}"):
-                            delete_customization(item['id'])
-                            st.rerun()
+                            try:
+                                delete_mcp(item['id'])
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ {e}")
                     
                     st.markdown(f"**Description:** \n{item['description']}")
                     if item['type'] in ["JSON Config", "Real File Upload"] and item['content']:
@@ -165,6 +153,9 @@ def render():
                         new_tags = st.text_input("Tags", value=item['tags'], key=f"edit_tags_{item['id']}")
                         new_content = item['content']
                         
+                        new_file_bytes = None
+                        new_file_name = None
+                        
                         if item['type'] in ["JSON Config", "Real File Upload"]:
                             col_edit_url, col_edit_btn = st.columns([4, 1])
                             with col_edit_url:
@@ -178,24 +169,31 @@ def render():
 
                             new_content = st.text_area("JSON Configuration", height=200, key=text_key)
 
+                            if item['type'] == "Real File Upload":
+                                st.markdown(f"📄 **Current File:** `{item.get('file_name', 'Unknown File')}`")
+                                new_uploaded_file = st.file_uploader("Upload New File to Replace (Leave empty to keep current file)", key=f"edit_file_mcp_{item['id']}")
+                                
+                                if new_uploaded_file is not None:
+                                    new_file_bytes = new_uploaded_file.read()
+                                    new_file_name = new_uploaded_file.name
+
                         elif item['type'] == "Web Bookmark":
                             new_content = st.text_input("URL", value=item['content'], key=f"edit_url_{item['id']}")
                             
                         if st.button("💾 Save Changes", key=f"save_edit_{item['id']}", type="secondary"):
-                            clean_new_tags = new_tags.lower().strip() if new_tags else ""
-                            final_edit_desc = new_desc.strip()
-                            if new_ref.strip(): final_edit_desc += f"\n\n🔗 **Reference Bookmark:** [{new_ref.strip()}]({new_ref.strip()})"
-                            
-                            if item['type'] in ["JSON Config", "Real File Upload"]:
-                                try:
-                                    parsed_json = json.loads(new_content)
-                                    validate(instance=parsed_json, schema=MCP_SCHEMA)
-                                    update_customization(item['id'], new_name, new_content, final_edit_desc.strip(), clean_new_tags)
-                                    st.success("✅ Asset updated successfully!")
-                                    st.rerun()
-                                except json.JSONDecodeError as e: st.error(f"❌ **Syntax Error:** Line {e.lineno}")
-                                except ValidationError as e: st.error(f"❌ **Schema Error:** {e.message}")
-                            else:
-                                update_customization(item['id'], new_name, new_content, final_edit_desc.strip(), clean_new_tags)
+                            try:
+                                update_mcp(
+                                    item_id=item['id'],
+                                    name=new_name,
+                                    storage_type=item['type'],
+                                    content=new_content,
+                                    description=new_desc,
+                                    tags=new_tags,
+                                    reference_url=new_ref,
+                                    file_blob=new_file_bytes,
+                                    file_name=new_file_name
+                                )
                                 st.success("✅ Asset updated successfully!")
                                 st.rerun()
+                            except (AssetValidationError, AssetNotFoundError) as e:
+                                st.error(f"❌ {e}")

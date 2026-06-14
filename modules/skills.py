@@ -1,54 +1,28 @@
 import streamlit as st
-import urllib.request
-import urllib.error
-import re
-from database.db_manager import save_customization, get_customizations, delete_customization, update_customization
-
-def parse_frontmatter(content):
-    """Helper: Extracts name, description, and tags, but RETURNS THE FULL CONTENT intact."""
-    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
-    if match:
-        frontmatter = match.group(1)
-        
-        # Match 'title:' or 'name:'
-        name_match = re.search(r'^(?:title|name):\s*(.+)$', frontmatter, re.MULTILINE | re.IGNORECASE)
-        name = name_match.group(1).strip() if name_match else None
-        
-        # Match 'category:' and map it to tags
-        cat_match = re.search(r'^category:\s*(.+)$', frontmatter, re.MULTILINE | re.IGNORECASE)
-        tags = cat_match.group(1).strip() if cat_match else None
-        
-        # Match 'description:', looking ahead for the next key to safely capture multi-line text
-        desc_match = re.search(r'^description:\s*(.*?)(?=\n^[a-zA-Z0-9_-]+:|\Z)', frontmatter, re.MULTILINE | re.IGNORECASE | re.DOTALL)
-        desc = None
-        if desc_match:
-            desc = re.sub(r'\s+', ' ', desc_match.group(1)).strip()
-        
-        return name, desc, tags, content 
-    return None, None, None, content
+from core.skills import create_skill, update_skill, delete_skill, get_skills
+from core.utils import fetch_remote_content, parse_frontmatter
+from core.exceptions import AssetValidationError, AssetNotFoundError, AssetFetchError
 
 def perform_fetch(url_key, name_key, desc_key, tags_key, content_key):
-    """Callback: Fetches markdown from a remote URL and parses it."""
+    """Callback: Fetches markdown from a remote URL and parses it using core utilities."""
     url = st.session_state.get(url_key, "").strip()
     if not url:
         st.session_state[f"error_{url_key}"] = "Please enter a URL first."
         return
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            fetched_data = response.read().decode("utf-8")
-            fetch_name, fetch_desc, fetch_tags, fetch_body = parse_frontmatter(fetched_data)
-            
-            if fetch_name and name_key: st.session_state[name_key] = fetch_name
-            if fetch_desc and desc_key: st.session_state[desc_key] = fetch_desc
-            if fetch_tags and tags_key: st.session_state[tags_key] = fetch_tags
-            if content_key: st.session_state[content_key] = fetch_body
-            st.session_state[f"error_{url_key}"] = None
+        fetched_data = fetch_remote_content(url)
+        fetch_name, fetch_desc, fetch_tags, fetch_body = parse_frontmatter(fetched_data)
+        
+        if fetch_name and name_key: st.session_state[name_key] = fetch_name
+        if fetch_desc and desc_key: st.session_state[desc_key] = fetch_desc
+        if fetch_tags and tags_key: st.session_state[tags_key] = fetch_tags
+        if content_key: st.session_state[content_key] = fetch_body
+        st.session_state[f"error_{url_key}"] = None
     except Exception as e:
         st.session_state[f"error_{url_key}"] = f"❌ Failed to fetch URL: {e}"
 
 def load_file_content():
-    """Callback: Safely reads uploaded text file into the form."""
+    """Callback: Safely reads uploaded text file into the form and parses frontmatter."""
     if st.session_state.get("skills_uploader") is not None:
         try:
             content = st.session_state.skills_uploader.read().decode("utf-8")
@@ -116,36 +90,31 @@ def render():
         tags = st.text_input("Category Tags (comma-separated)", key="skills_tags")
         
         if st.button("Save Skill Asset", type="primary"):
-            clean_tags = tags.lower().strip() if tags else ""
-            final_desc = description.strip()
-            if reference_url.strip(): final_desc += f"\n\n🔗 **Reference Bookmark:** [{reference_url.strip()}]({reference_url.strip()})"
-            final_desc = final_desc.strip()
-            
-            if not name: st.error("Please supply a valid item name.")
-            elif storage_type == "Web Bookmark" and not content: st.error("Please supply a valid URL for the bookmark.")
-            elif storage_type in ["Markdown Text", "Real File Upload"] and not content.strip(): st.error("Please provide the text content.")
-            else:
-                # Parse content to see if there is updated frontmatter
-                parsed_name, parsed_desc, parsed_tags, _ = parse_frontmatter(content)
-                
-                # If frontmatter exists, it overrides the manual input fields
-                final_name = parsed_name if parsed_name else name
-                final_desc = parsed_desc if parsed_desc else description.strip()
-                final_tags = parsed_tags if parsed_tags else tags.lower().strip()
-                
-                if reference_url.strip(): 
-                    final_desc += f"\n\n🔗 **Reference Bookmark:** [{reference_url.strip()}]({reference_url.strip()})"
-
-                save_customization("Skills", final_name, storage_type, content, uploaded_file_bytes, uploaded_file_name, final_desc.strip(), final_tags)
-                
+            try:
+                create_skill(
+                    name=name,
+                    storage_type=storage_type,
+                    content=content if storage_type != "Web Bookmark" else content.strip(),
+                    file_blob=uploaded_file_bytes,
+                    file_name=uploaded_file_name,
+                    description=description,
+                    tags=tags,
+                    reference_url=reference_url
+                )
                 st.session_state.skills_clear_form = True
                 st.success("✅ Successfully saved your Skill asset!")
                 st.rerun()
+            except (AssetValidationError, AssetFetchError) as e:
+                st.error(f"❌ {e}")
 
     # --- TAB: VIEW & MANAGE SKILLS ---
     with tab_view:
         st.subheader("Active Assets under Skills")
-        items = get_customizations(category="Skills")
+        try:
+            items = get_skills()
+        except Exception as e:
+            st.error(f"Error loading skills: {e}")
+            items = []
         
         if not items:
             st.info("No records found in this category yet.")
@@ -158,8 +127,11 @@ def render():
                         if item['tags']: st.markdown(" ".join([f"`{t.strip().lower()}`" for t in item['tags'].split(",") if t.strip()]))
                     with col2:
                         if st.button("🗑️ Delete", key=f"del_Skills_{item['id']}"):
-                            delete_customization(item['id'])
-                            st.rerun()
+                            try:
+                                delete_skill(item['id'])
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ {e}")
                     
                     st.markdown(f"**Description:** \n{item['description']}")
                     
@@ -196,8 +168,8 @@ def render():
                         new_content = item['content']
                         
                         # Data placeholders for Real File Uploads
-                        new_file_bytes = item.get('file_blob')
-                        new_file_name = item.get('file_name')
+                        new_file_bytes = None
+                        new_file_name = None
                         
                         if item['type'] in ["Markdown Text", "Real File Upload"]:
                             col_edit_url, col_edit_btn = st.columns([4, 1])
@@ -226,30 +198,18 @@ def render():
                             new_content = st.text_input("URL", value=item['content'], key=f"edit_url_skills_{item['id']}")
                             
                         if st.button("💾 Save Changes", key=f"save_edit_skills_{item['id']}", type="secondary"):
-                            parsed_name, parsed_desc, parsed_tags, _ = parse_frontmatter(new_content)
-                            if parsed_tags:
-                                #check if the parsed tag exists and do not duplicate them in the new_tags
-                                for tag in parsed_tags.split(","):
-                                    if tag.strip() not in new_tags:
-                                        new_tags = new_tags + "," + tag.strip()
-                                    else:
-                                        new_tags = new_tags.lower().strip()
-                            else:
-                                new_tags = new_tags.lower().strip()
-                                
-                            final_name = parsed_name if parsed_name else new_name
-                            final_tags = new_tags
-                            final_desc = new_desc.strip()
-                            if new_ref.strip(): final_desc += f"\n\n🔗 **Reference Bookmark:** [{new_ref.strip()}]({new_ref.strip()})"
-                            
-                            update_customization(
-                                item['id'], 
-                                new_name, 
-                                new_content, 
-                                final_desc.strip(), 
-                                final_tags,
-                                file_blob=new_file_bytes,
-                                file_name=new_file_name
-                            )
-                            st.success("✅ Asset updated successfully!")
-                            st.rerun()
+                            try:
+                                update_skill(
+                                    item_id=item['id'],
+                                    name=new_name,
+                                    content=new_content,
+                                    description=new_desc,
+                                    tags=new_tags,
+                                    reference_url=new_ref,
+                                    file_blob=new_file_bytes,
+                                    file_name=new_file_name
+                                )
+                                st.success("✅ Asset updated successfully!")
+                                st.rerun()
+                            except (AssetValidationError, AssetNotFoundError) as e:
+                                st.error(f"❌ {e}")

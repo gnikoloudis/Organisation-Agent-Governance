@@ -1,5 +1,6 @@
 import streamlit as st
-from database.db_manager import save_customization, get_customizations, delete_customization
+from core.workflows import create_workflow, delete_workflow, get_workflows
+from core.exceptions import AssetValidationError
 
 def render():
     tab_view, tab_create = st.tabs(["📁 View Workflows", "➕ Add to Workflows"])
@@ -21,29 +22,26 @@ def render():
             tags = st.text_input("Category Tags (comma-separated)")
             
             if st.form_submit_button("Save Asset"):
-                if not name:
-                    st.error("Please supply a valid item name.")
-                elif not content:
-                    st.error("Please supply a valid URL for the bookmark.")
-                else:
-                    # Hardcoding "Web Bookmark" and sending None for file data
-                    save_customization(
-                        category="Workflows", 
-                        name=name, 
-                        type_val="Web Bookmark", 
-                        content=content, 
-                        file_blob=None, 
-                        file_name=None, 
-                        description=description, 
+                try:
+                    create_workflow(
+                        name=name,
+                        content=content,
+                        description=description,
                         tags=tags
                     )
                     st.success("Successfully saved your Workflows asset!")
                     st.rerun()
+                except AssetValidationError as e:
+                    st.error(f"❌ {e}")
 
     # --- TAB: VIEW & MANAGE WORKFLOWS ---
     with tab_view:
         st.subheader("Active Assets under Workflows")
-        items = get_customizations(category="Workflows")
+        try:
+            items = get_workflows()
+        except Exception as e:
+            st.error(f"Error loading workflows: {e}")
+            items = []
         
         if not items:
             st.info("No records found in this category yet.")
@@ -57,8 +55,11 @@ def render():
                             st.markdown(" ".join([f"`{t.strip()}`" for t in item['tags'].split(",") if t.strip()]))
                     with col2:
                         if st.button("🗑️ Delete", key=f"del_Workflows_{item['id']}"):
-                            delete_customization(item['id'])
-                            st.rerun()
+                            try:
+                                delete_workflow(item['id'])
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ {e}")
                     
                     st.markdown(f"**Description:** {item['description']}")
                     

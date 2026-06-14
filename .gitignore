@@ -3,5 +3,6 @@ codebase_text/*
 *.pyc
 *.pyo
 *.pyd
-agent_customizations.db
+*.db
 temp/*
+.agent*

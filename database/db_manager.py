@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = "agent_customizations.db"
+DB_PATH = os.environ.get("AGENT_DB_PATH", "agent_customizations.db")
 
 def get_connection():
     """Establishes and returns a connection to the SQLite database."""
@@ -38,6 +38,7 @@ def save_customization(category, name, type_val, content, file_blob, file_name, 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (category, name, type_val, content, file_blob, file_name, description, tags))
         conn.commit()
+        return cursor.lastrowid
 
 def get_customizations(category=None):
     """Retrieves records, optionally filtered by a specific category."""
@@ -60,9 +61,26 @@ def update_customization(item_id, name, content, description, tags, file_blob=No
     """Updates an existing agent customization record."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE customizations 
-            SET name = ?, content = ?, description = ?, tags = ?
-            WHERE id = ?
-        """, (name, content, description, tags, item_id))
+        if file_blob is not None or file_name is not None:
+            cursor.execute("""
+                UPDATE customizations 
+                SET name = ?, content = ?, description = ?, tags = ?, file_blob = ?, file_name = ?
+                WHERE id = ?
+            """, (name, content, description, tags, file_blob, file_name, item_id))
+        else:
+            cursor.execute("""
+                UPDATE customizations 
+                SET name = ?, content = ?, description = ?, tags = ?
+                WHERE id = ?
+            """, (name, content, description, tags, item_id))
         conn.commit()
+
+def get_customization_by_id(item_id):
+    """Retrieves a single customization record by its ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM customizations WHERE id = ?", (item_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
