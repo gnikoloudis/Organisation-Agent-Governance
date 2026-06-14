@@ -1,0 +1,7 @@
+.venv
+codebase_text/*
+*.pyc
+*.pyo
+*.pyd
+agent_customizations.db
+temp/*
