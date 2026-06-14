@@ -78,6 +78,39 @@ class AssetResponse(BaseModel):
             created_at=str(row["created_at"])
         )
 
+class RelationCreate(BaseModel):
+    child_id: int
+    relation_type: str
+    relation_alias: str
+
+class RelationResponse(BaseModel):
+    parent_id: int
+    child_id: int
+    relation_type: str
+    relation_alias: str
+    child_asset: AssetResponse
+
+    @classmethod
+    def from_db_row(cls, row: dict):
+        child_data = {
+            "id": row["child_id"],
+            "category": row["category"],
+            "name": row["name"],
+            "type": row["type"],
+            "content": row["content"],
+            "file_name": row["file_name"],
+            "description": row["description"],
+            "tags": row["tags"],
+            "created_at": str(row["created_at"])
+        }
+        return cls(
+            parent_id=row["parent_id"],
+            child_id=row["child_id"],
+            relation_type=row["relation_type"],
+            relation_alias=row["relation_alias"],
+            child_asset=AssetResponse(**child_data)
+        )
+
 class AssetCreate(BaseModel):
     name: str
     storage_type: str
@@ -178,6 +211,24 @@ def download_skill_file(item_id: int):
         headers={"Content-Disposition": f"attachment; filename={item['file_name']}"}
     )
 
+@app.get("/api/skills/{item_id}/relations", response_model=List[RelationResponse], tags=["Skills"])
+def get_skill_relations_api(item_id: int):
+    from core.skills import get_skill_relations
+    relations = get_skill_relations(item_id)
+    return [RelationResponse.from_db_row(r) for r in relations]
+
+@app.post("/api/skills/{item_id}/relations", status_code=status.HTTP_201_CREATED, tags=["Skills"])
+def add_skill_relation_api(item_id: int, payload: RelationCreate):
+    from core.skills import add_skill_relation
+    add_skill_relation(item_id, payload.child_id, payload.relation_type, payload.relation_alias)
+    return {"detail": "Relation added successfully."}
+
+@app.delete("/api/skills/{item_id}/relations", tags=["Skills"])
+def delete_skill_relation_api(item_id: int, payload: RelationCreate):
+    from core.skills import remove_skill_relation
+    remove_skill_relation(item_id, payload.child_id, payload.relation_type, payload.relation_alias)
+    return {"detail": "Relation deleted successfully."}
+
 
 # ==========================================
 # RULES ENDPOINTS
@@ -235,6 +286,24 @@ def download_rule_file(item_id: int):
         media_type="application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename={item['file_name']}"}
     )
+
+@app.get("/api/rules/{item_id}/relations", response_model=List[RelationResponse], tags=["Rules"])
+def get_rule_relations_api(item_id: int):
+    from core.rules import get_rule_relations
+    relations = get_rule_relations(item_id)
+    return [RelationResponse.from_db_row(r) for r in relations]
+
+@app.post("/api/rules/{item_id}/relations", status_code=status.HTTP_201_CREATED, tags=["Rules"])
+def add_rule_relation_api(item_id: int, payload: RelationCreate):
+    from core.rules import add_rule_relation
+    add_rule_relation(item_id, payload.child_id, payload.relation_type, payload.relation_alias)
+    return {"detail": "Relation added successfully."}
+
+@app.delete("/api/rules/{item_id}/relations", tags=["Rules"])
+def delete_rule_relation_api(item_id: int, payload: RelationCreate):
+    from core.rules import remove_rule_relation
+    remove_rule_relation(item_id, payload.child_id, payload.relation_type, payload.relation_alias)
+    return {"detail": "Relation deleted successfully."}
 
 
 # ==========================================

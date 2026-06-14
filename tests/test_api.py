@@ -295,3 +295,105 @@ def test_exporter_not_found():
     response = client.post("/api/exporter/run", json=export_payload)
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+def test_relations_and_hierarchical_export():
+    """Test 3: Verify creation, querying, deletion block, and hierarchical exporting of relations."""
+    # 1. Create a parent skill
+    parent_payload = {
+        "name": "Developer Skill",
+        "storage_type": "Markdown Text",
+        "content": "# Dev instructions",
+        "description": "Main dev skill",
+        "tags": "dev, skill"
+    }
+    resp_parent = client.post("/api/skills", json=parent_payload)
+    assert resp_parent.status_code == 201
+    parent_id = resp_parent.json()["id"]
+
+    # 2. Create a child rule
+    child_rule_payload = {
+        "name": "Style Guide Rule",
+        "storage_type": "Markdown Text",
+        "content": "# Guidelines",
+        "description": "Dev styles",
+        "tags": "dev, guidelines"
+    }
+    resp_child_rule = client.post("/api/rules", json=child_rule_payload)
+    assert resp_child_rule.status_code == 201
+    child_rule_id = resp_child_rule.json()["id"]
+
+    # 3. Create another child skill (representing code asset)
+    child_code_payload = {
+        "name": "Dev Helper Code",
+        "storage_type": "Real File Upload",
+        "content": "def helper():\n    pass",
+        "file_name": "helper_original.py",
+        "description": "Helper functions",
+        "tags": "helper"
+    }
+    resp_child_code = client.post("/api/skills", json=child_code_payload)
+    assert resp_child_code.status_code == 201
+    child_code_id = resp_child_code.json()["id"]
+
+    # 4. Link child rule to parent skill as 'reference'
+    link_rule_payload = {
+        "child_id": child_rule_id,
+        "relation_type": "reference",
+        "relation_alias": "style_guide.md"
+    }
+    resp_link_rule = client.post(f"/api/skills/{parent_id}/relations", json=link_rule_payload)
+    assert resp_link_rule.status_code == 201
+
+    # 5. Link child code to parent skill as 'asset' with alias 'helper.py'
+    link_code_payload = {
+        "child_id": child_code_id,
+        "relation_type": "asset",
+        "relation_alias": "helper.py"
+    }
+    resp_link_code = client.post(f"/api/skills/{parent_id}/relations", json=link_code_payload)
+    assert resp_link_code.status_code == 201
+
+    # 6. Retrieve relations and verify
+    resp_get_rels = client.get(f"/api/skills/{parent_id}/relations")
+    assert resp_get_rels.status_code == 200
+    relations = resp_get_rels.json()
+    assert len(relations) == 2
+    
+    aliases = [r["relation_alias"] for r in relations]
+    assert "style_guide.md" in aliases
+    assert "helper.py" in aliases
+
+    # 7. Assert deletion of child is prevented
+    resp_del_child = client.delete(f"/api/rules/{child_rule_id}")
+    assert resp_del_child.status_code == 422
+    assert "referenced in a relationship" in resp_del_child.json()["detail"]
+
+    # 8. Export the parent skill
+    export_payload = {
+        "selected_ids": [parent_id],
+        "base_path": ".agent_test"
+    }
+    resp_export = client.post("/api/exporter/run", json=export_payload)
+    assert resp_export.status_code == 200
+    exported_files = resp_export.json()["exported_files"]
+
+    # Verify folder structure
+    parent_path = os.path.join(".agent_test", "skills", "developer_skill", "developer_skill.md")
+    rule_rel_path = os.path.join(".agent_test", "skills", "developer_skill", "references", "style_guide.md")
+    code_rel_path = os.path.join(".agent_test", "skills", "developer_skill", "assets", "helper.py")
+
+    assert os.path.exists(parent_path)
+    assert os.path.exists(rule_rel_path)
+    assert os.path.exists(code_rel_path)
+
+    with open(code_rel_path, "r", encoding="utf-8") as f:
+        code_content = f.read()
+    assert "def helper():" in code_content
+
+    # 9. Delete relationship link, then check that deletion of child is now allowed
+    resp_remove_link = client.request("DELETE", f"/api/skills/{parent_id}/relations", json=link_rule_payload)
+    assert resp_remove_link.status_code == 200
+
+    resp_del_child_allowed = client.delete(f"/api/rules/{child_rule_id}")
+    assert resp_del_child_allowed.status_code == 200

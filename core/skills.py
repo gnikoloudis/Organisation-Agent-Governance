@@ -1,4 +1,8 @@
-from database.db_manager import save_customization, get_customizations, delete_customization, update_customization, get_customization_by_id
+from database.db_manager import (
+    save_customization, get_customizations, delete_customization, 
+    update_customization, get_customization_by_id, add_relation, 
+    get_relations, delete_relation
+)
 from core.exceptions import AssetValidationError, AssetNotFoundError
 from core.utils import parse_frontmatter
 
@@ -94,3 +98,44 @@ def delete_skill(item_id):
     """Deletes a skill asset by ID."""
     get_skill_by_id(item_id) # Ensure it exists and belongs to this category
     delete_customization(item_id)
+
+def get_skill_relations(skill_id):
+    """Retrieves related customizations for a skill."""
+    get_skill_by_id(skill_id)
+    return get_relations(skill_id)
+
+def add_skill_relation(skill_id, child_id, relation_type, relation_alias):
+    """Links a child customization to the parent skill."""
+    if relation_type not in ["reference", "asset", "tool"]:
+        raise AssetValidationError("Relation type must be 'reference', 'asset', or 'tool'.")
+        
+    relation_alias = relation_alias.strip() if relation_alias else ""
+    if not relation_alias:
+        raise AssetValidationError("Relation alias/filename cannot be empty.")
+        
+    # Ensure parent exists
+    get_skill_by_id(skill_id)
+    
+    # Ensure child exists and is a Skill or Rule
+    from core.rules import get_rule_by_id
+    child = None
+    try:
+        child = get_skill_by_id(child_id)
+    except AssetNotFoundError:
+        try:
+            child = get_rule_by_id(child_id)
+        except AssetNotFoundError:
+            raise AssetNotFoundError(f"Child customization with ID {child_id} not found in Skills or Rules.")
+            
+    if child["category"] not in ["Skills", "Rules"]:
+        raise AssetValidationError("Relations can only be established with Skills or Rules.")
+        
+    if int(skill_id) == int(child_id):
+        raise AssetValidationError("A Skill cannot have a relationship to itself.")
+        
+    add_relation(skill_id, child_id, relation_type, relation_alias)
+
+def remove_skill_relation(skill_id, child_id, relation_type, relation_alias):
+    """Removes a relationship link between a parent skill and a child."""
+    get_skill_by_id(skill_id)
+    delete_relation(skill_id, child_id, relation_type, relation_alias)

@@ -24,6 +24,7 @@ def export_assets(selected_items, base_path):
         file_path = os.path.join(target_dir, f"{safe_name}{extension}")
         
         content = item['file_blob'] if item['file_blob'] else item['content']
+        content = content or ""
         
         try:
             if isinstance(content, bytes):
@@ -35,5 +36,36 @@ def export_assets(selected_items, base_path):
             exported_paths.append(os.path.abspath(file_path))
         except Exception as e:
             raise AssetValidationError(f"Error writing {item['name']} to {base_path}: {e}")
+            
+        # Export relations if item is a Skill or Rule
+        if item['category'] in ["Skills", "Rules"]:
+            from database.db_manager import get_relations
+            relations = get_relations(item['id'])
+            for rel in relations:
+                rel_type = rel['relation_type']
+                plural_type = f"{rel_type}s" if not rel_type.endswith("s") else rel_type
+                
+                rel_dir = os.path.join(target_dir, plural_type)
+                os.makedirs(rel_dir, exist_ok=True)
+                
+                rel_alias = rel['relation_alias']
+                rel_file_path = os.path.join(rel_dir, rel_alias)
+                
+                rel_content = rel['file_blob'] if rel['file_blob'] else rel['content']
+                rel_content = rel_content or ""
+                
+                if rel['type'] == "Web Bookmark" and rel_content:
+                    rel_content = f"[Bookmark Link]({rel_content})\n\nDescription: {rel['description'] or ''}"
+                    
+                try:
+                    if isinstance(rel_content, bytes):
+                        with open(rel_file_path, 'wb') as f:
+                            f.write(rel_content)
+                    else:
+                        with open(rel_file_path, 'w', encoding='utf-8') as f:
+                            f.write(str(rel_content))
+                    exported_paths.append(os.path.abspath(rel_file_path))
+                except Exception as e:
+                    raise AssetValidationError(f"Error writing relation {rel_alias} to {rel_dir}: {e}")
             
     return exported_paths

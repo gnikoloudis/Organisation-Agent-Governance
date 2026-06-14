@@ -78,3 +78,45 @@ def delete_skill(item_id):
     else:
         from core.skills import delete_skill as core_delete
         core_delete(item_id)
+
+def get_skill_relations(skill_id):
+    if STREAMLIT_MODE == "api":
+        response = httpx2.get(f"{API_BASE_URL}/api/skills/{skill_id}/relations")
+        items = handle_response(response)
+        # Fetch file blobs for any child relation that is a file
+        for item in items:
+            child = item.get("child_asset", {})
+            if child and child.get("type") == "Real File Upload" and child.get("id"):
+                dl_resp = httpx2.get(f"{API_BASE_URL}/api/skills/{child['id']}/download")
+                if dl_resp.status_code == 200:
+                    child["file_blob"] = dl_resp.content
+        return items
+    else:
+        from core.skills import get_skill_relations as core_get_rels
+        return core_get_rels(skill_id)
+
+def add_skill_relation(skill_id, child_id, relation_type, relation_alias):
+    if STREAMLIT_MODE == "api":
+        payload = {
+            "child_id": child_id,
+            "relation_type": relation_type,
+            "relation_alias": relation_alias
+        }
+        response = httpx2.post(f"{API_BASE_URL}/api/skills/{skill_id}/relations", json=payload)
+        handle_response(response)
+    else:
+        from core.skills import add_skill_relation as core_add_rel
+        core_add_rel(skill_id, child_id, relation_type, relation_alias)
+
+def remove_skill_relation(skill_id, child_id, relation_type, relation_alias):
+    if STREAMLIT_MODE == "api":
+        payload = {
+            "child_id": child_id,
+            "relation_type": relation_type,
+            "relation_alias": relation_alias
+        }
+        response = httpx2.request("DELETE", f"{API_BASE_URL}/api/skills/{skill_id}/relations", json=payload)
+        handle_response(response)
+    else:
+        from core.skills import remove_skill_relation as core_remove_rel
+        core_remove_rel(skill_id, child_id, relation_type, relation_alias)

@@ -1,5 +1,7 @@
 import streamlit as st
-from services.skills import create_skill, update_skill, delete_skill, get_skills
+import os
+from services.skills import create_skill, update_skill, delete_skill, get_skills, get_skill_relations, add_skill_relation, remove_skill_relation
+from services.rules import get_rules
 from core.utils import fetch_remote_content, parse_frontmatter
 from core.exceptions import AssetValidationError, AssetNotFoundError, AssetFetchError
 
@@ -144,6 +146,153 @@ def render():
                         
                     elif item['type'] == "Real File Upload" and item.get('file_blob'):
                         st.download_button("⬇️ Download File", data=item['file_blob'], file_name=item['file_name'], key=f"dl_Skills_{item['id']}")
+
+                    # --- RELATIONSHIPS EXPANDER ---
+                    with st.expander("🔗 Related References, Assets & Tools"):
+                        try:
+                            relations = get_skill_relations(item['id'])
+                        except Exception as e:
+                            st.error(f"Error loading relations: {e}")
+                            relations = []
+                            
+                        if relations:
+                            st.markdown("##### **Current Relations**")
+                            for rel in relations:
+                                child_asset = rel["child_asset"]
+                                col_r1, col_r2, col_r3 = st.columns([3, 2, 1])
+                                with col_r1:
+                                    st.markdown(f"**[{child_asset['category']}] {child_asset['name']}**")
+                                    st.caption(f"Alias: `{rel['relation_alias']}` | Type: `{rel['relation_type']}`")
+                                with col_r2:
+                                    # Safe download or preview
+                                    if child_asset.get("type") == "Real File Upload" and child_asset.get("file_blob"):
+                                        st.download_button(
+                                            "⬇️ Download File", 
+                                            data=child_asset["file_blob"], 
+                                            file_name=child_asset["file_name"] or rel['relation_alias'], 
+                                            key=f"dl_rel_Skills_{item['id']}_{child_asset['id']}_{rel['relation_alias']}"
+                                        )
+                                with col_r3:
+                                    if st.button("🗑️ Delete Link", key=f"del_link_Skills_{item['id']}_{child_asset['id']}_{rel['relation_alias']}"):
+                                        try:
+                                            remove_skill_relation(item['id'], child_asset['id'], rel['relation_type'], rel['relation_alias'])
+                                            st.success("Relation removed!")
+                                            st.rerun()
+                                        except Exception as err:
+                                            st.error(f"Error: {err}")
+                        else:
+                            st.info("No relations linked to this Skill yet.")
+                            
+                        st.markdown("---")
+                        st.markdown("##### **Add a Relation**")
+                        
+                        # Tabs for existing vs import from URL
+                        tab_link_existing, tab_link_url = st.tabs(["🔗 Link Existing Skill/Rule", "🌐 Import from Remote URL"])
+                        
+                        with tab_link_existing:
+                            candidates = []
+                            try:
+                                candidates = [c for c in (get_skills() + get_rules()) if c['id'] != item['id']]
+                            except Exception:
+                                pass
+                                
+                            if not candidates:
+                                st.info("No other Skills or Rules available to link.")
+                            else:
+                                selected_candidate_name = st.selectbox(
+                                    "Select Skill/Rule to link",
+                                    options=[c['name'] for c in candidates],
+                                    key=f"cand_select_Skills_{item['id']}"
+                                )
+                                selected_candidate = next(c for c in candidates if c['name'] == selected_candidate_name)
+                                
+                                rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool"], key=f"cand_type_Skills_{item['id']}")
+                                
+                                # Default alias based on child file_name or sanitized name
+                                default_alias = selected_candidate.get("file_name") or f"{selected_candidate['name'].replace(' ', '_').lower()}.md"
+                                rel_alias = st.text_input("Relation Filename / Alias", value=default_alias, key=f"cand_alias_Skills_{item['id']}")
+                                
+                                if st.button("Link Existing Item", key=f"btn_link_Skills_{item['id']}", type="primary"):
+                                    try:
+                                        add_skill_relation(item['id'], selected_candidate['id'], rel_type, rel_alias)
+                                        st.success("Successfully linked item!")
+                                        st.rerun()
+                                    except Exception as err:
+                                        st.error(f"Error: {err}")
+                                        
+                        with tab_link_url:
+                            import_url = st.text_input("🌐 Enter URL to import", placeholder="https://...", key=f"import_url_Skills_{item['id']}")
+                            
+                            # Fields to capture child metadata
+                            child_name = st.text_input("Asset Name", key=f"import_name_Skills_{item['id']}")
+                            child_type = st.selectbox("Storage Type", ["Markdown Text", "Real File Upload"], key=f"import_storage_Skills_{item['id']}")
+                            child_desc = st.text_area("Asset Description", key=f"import_desc_Skills_{item['id']}")
+                            child_tags = st.text_input("Category Tags (comma-separated)", key=f"import_tags_Skills_{item['id']}")
+                            
+                            # Relation fields
+                            import_rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool"], key=f"import_type_Skills_{item['id']}")
+                            import_rel_alias = st.text_input("Relation Filename / Alias", key=f"import_alias_Skills_{item['id']}")
+                            
+                            # Button to fetch
+                            if st.button("Fetch & Pre-fill URL Content", key=f"btn_fetch_url_Skills_{item['id']}"):
+                                if not import_url.strip():
+                                    st.error("Please enter a URL first.")
+                                else:
+                                    try:
+                                        fetched_data = fetch_remote_content(import_url)
+                                        st.session_state[f"fetched_content_Skills_{item['id']}"] = fetched_data
+                                        
+                                        url_path = import_url.split("?")[0]
+                                        filename_from_url = os.path.basename(url_path)
+                                        
+                                        # Deduce extension & alias from URL if not specified
+                                        if not import_rel_alias:
+                                            st.session_state[f"import_alias_Skills_{item['id']}"] = filename_from_url
+                                        if not child_name:
+                                            st.session_state[f"import_name_Skills_{item['id']}"] = filename_from_url.split(".")[0]
+                                            
+                                        # If markdown
+                                        if filename_from_url.endswith(".md"):
+                                            st.session_state[f"import_storage_Skills_{item['id']}"] = "Markdown Text"
+                                            fetch_name, fetch_desc, fetch_tags, _ = parse_frontmatter(fetched_data)
+                                            if fetch_name: st.session_state[f"import_name_Skills_{item['id']}"] = fetch_name
+                                            if fetch_desc: st.session_state[f"import_desc_Skills_{item['id']}"] = fetch_desc
+                                            if fetch_tags: st.session_state[f"import_tags_Skills_{item['id']}"] = fetch_tags
+                                        else:
+                                            st.session_state[f"import_storage_Skills_{item['id']}"] = "Real File Upload"
+                                            
+                                        st.success("Successfully fetched remote URL! Pre-filled details below.")
+                                        st.rerun()
+                                    except Exception as err:
+                                        st.error(f"Error fetching URL: {err}")
+                                        
+                            fetched_content = st.session_state.get(f"fetched_content_Skills_{item['id']}")
+                            if fetched_content:
+                                with st.expander("📄 View Fetched Content Preview"):
+                                    st.code(fetched_content[:1000] + ("\n... [truncated]" if len(fetched_content) > 1000 else ""))
+                                    
+                                if st.button("Save & Link Imported Item", key=f"btn_save_imported_Skills_{item['id']}", type="primary"):
+                                    try:
+                                        # Child category matches parent category: Skills
+                                        child_category = "Skills"
+                                        
+                                        # Create the customization first
+                                        if child_type == "Real File Upload":
+                                            file_blob = fetched_content.encode("utf-8")
+                                            file_name = import_rel_alias or f"{child_name}.txt"
+                                            child_new_id = create_skill(child_name, child_type, "", file_blob, file_name, child_desc, child_tags)
+                                        else:
+                                            child_new_id = create_skill(child_name, child_type, fetched_content, None, None, child_desc, child_tags)
+                                                
+                                        # Establish relationship
+                                        add_skill_relation(item['id'], child_new_id, import_rel_type, import_rel_alias)
+                                        
+                                        # Clear fetched state
+                                        st.session_state[f"fetched_content_Skills_{item['id']}"] = None
+                                        st.success("✅ Successfully imported, saved and linked the remote asset!")
+                                        st.rerun()
+                                    except Exception as err:
+                                        st.error(f"Error saving imported item: {err}")
 
                     with st.expander("✏️ Edit Asset Details"):
                         name_key = f"edit_name_skills_{item['id']}"

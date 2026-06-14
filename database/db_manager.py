@@ -88,6 +88,17 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS customization_relations (
+                    parent_id INTEGER NOT NULL,
+                    child_id INTEGER NOT NULL,
+                    relation_type TEXT NOT NULL,
+                    relation_alias TEXT NOT NULL,
+                    PRIMARY KEY (parent_id, child_id, relation_type, relation_alias),
+                    FOREIGN KEY (parent_id) REFERENCES customizations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (child_id) REFERENCES customizations(id)
+                )
+            """)
         else:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS customizations (
@@ -103,6 +114,53 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS customization_relations (
+                    parent_id INTEGER NOT NULL,
+                    child_id INTEGER NOT NULL,
+                    relation_type TEXT NOT NULL,
+                    relation_alias TEXT NOT NULL,
+                    PRIMARY KEY (parent_id, child_id, relation_type, relation_alias),
+                    FOREIGN KEY (parent_id) REFERENCES customizations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (child_id) REFERENCES customizations(id)
+                )
+            """)
+        conn.commit()
+
+def add_relation(parent_id, child_id, relation_type, relation_alias):
+    """Adds a relation between parent and child customizations."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = """
+            INSERT INTO customization_relations (parent_id, child_id, relation_type, relation_alias)
+            VALUES (?, ?, ?, ?)
+        """
+        execute_query(cursor, sql, (parent_id, child_id, relation_type, relation_alias))
+        conn.commit()
+
+def get_relations(parent_id):
+    """Retrieves all child relations for a parent customization."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = """
+            SELECT r.parent_id, r.child_id, r.relation_type, r.relation_alias,
+                   c.category, c.name, c.type, c.content, c.file_blob, c.file_name, c.description, c.tags, c.created_at
+            FROM customization_relations r
+            JOIN customizations c ON r.child_id = c.id
+            WHERE r.parent_id = ?
+        """
+        execute_query(cursor, sql, (parent_id,))
+        return map_rows(cursor)
+
+def delete_relation(parent_id, child_id, relation_type, relation_alias):
+    """Removes a relation."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = """
+            DELETE FROM customization_relations 
+            WHERE parent_id = ? AND child_id = ? AND relation_type = ? AND relation_alias = ?
+        """
+        execute_query(cursor, sql, (parent_id, child_id, relation_type, relation_alias))
         conn.commit()
 
 def save_customization(category, name, type_val, content, file_blob, file_name, description, tags):
@@ -137,9 +195,34 @@ def get_customizations(category=None):
         return map_rows(cursor)
 
 def delete_customization(item_id):
-    """Removes a customization by its primary ID key."""
+    """Removes a customization by its primary ID key, preventing it if referenced as a child."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        # Check deletion protection: is this item a child in any relationship?
+        sql_check = "SELECT COUNT(*) as count FROM customization_relations WHERE child_id = ?"
+        execute_query(cursor, sql_check, (item_id,))
+        res = cursor.fetchone()
+        
+        # Unpack count depending on db type or Row mapping
+        if res:
+            if isinstance(res, dict):
+                count = res.get("count", 0)
+            elif hasattr(res, "keys") or isinstance(res, tuple):
+                # If pg8000 or sqlite3 raw tuple/dict cursor
+                count = res[0]
+            else:
+                count = res[0]
+        else:
+            count = 0
+            
+        if count > 0:
+            from core.exceptions import AssetValidationError
+            raise AssetValidationError("Cannot delete this customization because it is referenced in a relationship by other Skills/Rules.")
+            
+        # Clean up outgoing relationships where this item is the parent
+        sql_del_rels = "DELETE FROM customization_relations WHERE parent_id = ?"
+        execute_query(cursor, sql_del_rels, (item_id,))
+        
         sql = "DELETE FROM customizations WHERE id = ?"
         execute_query(cursor, sql, (item_id,))
         conn.commit()
