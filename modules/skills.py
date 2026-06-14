@@ -328,15 +328,16 @@ def render():
                         with tab_link_existing:
                             candidates = []
                             try:
-                                candidates = [c for c in (get_skills() + get_rules()) if c['id'] != item['id']]
+                                candidates = [c for c in get_skills() if c['id'] != item['id']]
+                                candidates.sort(key=lambda x: x['name'].lower())
                             except Exception:
                                 pass
                                 
                             if not candidates:
-                                st.info("No other Skills or Rules available to link.")
+                                st.info("No other Skills available to link.")
                             else:
                                 selected_candidate_name = st.selectbox(
-                                    "Select Skill/Rule to link",
+                                    "Select Skill to link",
                                     options=[c['name'] for c in candidates],
                                     key=f"cand_select_Skills_{item['id']}"
                                 )
