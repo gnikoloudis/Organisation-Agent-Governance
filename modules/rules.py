@@ -1,5 +1,5 @@
 import streamlit as st
-from core.rules import create_rule, update_rule, delete_rule, get_rules
+from services.rules import create_rule, update_rule, delete_rule, get_rules
 from core.utils import fetch_remote_content, parse_frontmatter
 from core.exceptions import AssetValidationError, AssetNotFoundError, AssetFetchError
 

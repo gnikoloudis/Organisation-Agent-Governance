@@ -1,5 +1,5 @@
 import streamlit as st
-from core.workflows import create_workflow, delete_workflow, get_workflows
+from services.workflows import create_workflow, delete_workflow, get_workflows
 from core.exceptions import AssetValidationError
 
 def render():

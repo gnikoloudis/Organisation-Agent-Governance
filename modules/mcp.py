@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from core.mcp import create_mcp, update_mcp, delete_mcp, get_mcps
+from services.mcp import create_mcp, update_mcp, delete_mcp, get_mcps
 from core.utils import fetch_remote_content
 from core.exceptions import AssetValidationError, AssetNotFoundError
 

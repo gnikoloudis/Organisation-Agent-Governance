@@ -1,11 +1,12 @@
 import base64
+from contextlib import asynccontextmanager
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # Database imports
-from database.db_manager import get_customization_by_id
+from database.db_manager import get_customization_by_id, init_db
 
 # Core exceptions
 from core.exceptions import AssetValidationError, AssetFetchError, AssetNotFoundError
@@ -17,10 +18,16 @@ from core.workflows import get_workflows, get_workflow_by_id, create_workflow, u
 from core.mcp import get_mcps, get_mcp_by_id, create_mcp, update_mcp, delete_mcp
 from core.exporter import export_assets
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
 app = FastAPI(
     title="Agent Customization Hub REST API",
     description="REST API for managing Skills, Rules, Workflows, MCP Services, and Exports.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Exception Handlers

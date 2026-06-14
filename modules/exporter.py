@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 from database.db_manager import get_customizations
-from core.exporter import export_assets
+from services.exporter import export_assets
 from core.exceptions import AssetValidationError
 
 def render():

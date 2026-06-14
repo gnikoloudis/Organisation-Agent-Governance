@@ -1,5 +1,5 @@
 import streamlit as st
-from core.skills import create_skill, update_skill, delete_skill, get_skills
+from services.skills import create_skill, update_skill, delete_skill, get_skills
 from core.utils import fetch_remote_content, parse_frontmatter
 from core.exceptions import AssetValidationError, AssetNotFoundError, AssetFetchError
 
