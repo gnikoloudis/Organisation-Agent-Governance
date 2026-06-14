@@ -297,7 +297,7 @@ def render():
                                         if child_type == "Real File Upload":
                                             file_blob = fetched_content.encode("utf-8")
                                             file_name = import_rel_alias or f"{child_name}.txt"
-                                            child_new_id = create_skill(child_name, child_type, "", file_blob, file_name, child_desc, child_tags)
+                                            child_new_id = create_skill(child_name, child_type, fetched_content, file_blob, file_name, child_desc, child_tags)
                                         else:
                                             child_new_id = create_skill(child_name, child_type, fetched_content, None, None, child_desc, child_tags)
                                                 
