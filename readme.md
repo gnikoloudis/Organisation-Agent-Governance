@@ -98,9 +98,28 @@ Run your Streamlit instance (deployed on Streamlit Community Cloud, Hugging Face
 
 ---
 
+## Skills & Rules Relations & Hierarchical Exporter
+
+The system supports creating, managing, and exporting parent-child relationships between **Skills** and **Rules**.
+
+### Features
+* **Relation Mapping**: Link a parent Skill or Rule to other child Skills or Rules.
+* **Relation Types**: Categorize relations as `"reference"`, `"asset"`, or `"tool"`.
+* **User-Defined Aliases**: Assign custom filenames/aliases (e.g. `utils.py`, `config.json`, `setup.sh`) to the related items.
+* **Deletion Protection**: To preserve referential integrity, any customization that is currently referenced as a child in an active relationship cannot be deleted. Deleting a parent automatically cleans up its outgoing relations.
+* **Hierarchical Exporting**: When you export a parent Skill or Rule, the Exporter automatically packages all linked children into structured subdirectories:
+  - `base_path/skills/{parent_name}/references/{alias_name}`
+  - `base_path/skills/{parent_name}/assets/{alias_name}`
+  - `base_path/skills/{parent_name}/tools/{alias_name}`
+* **Remote URL Imports**: Under the relationship panel, you can import new related items directly from remote URLs:
+  - **Markdown (`.md`)**: Automatically fetches content and extracts frontmatter (`title`, `description`, `category`) to pre-fill metadata fields.
+  - **Code Assets (e.g., `.py`, `.js`, `.json`)**: Fetches content as a raw file upload, prompting manual entry for name, description, and tags in the UI form.
+
+---
+
 ## Running the Automated Test Suite
 
-To verify CRUD operations, schema validation, and database compatibility:
+To verify CRUD operations, schema validation, database compatibility, and relations mapping:
 
 ```bash
 .\.venv\Scripts\python -m pytest tests/test_api.py
