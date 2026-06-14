@@ -23,6 +23,35 @@ def perform_fetch(url_key, name_key, desc_key, tags_key, content_key):
     except Exception as e:
         st.session_state[f"error_{url_key}"] = f"❌ Failed to fetch URL: {e}"
 
+def perform_relation_fetch(url_key, name_key, storage_key, desc_key, tags_key, alias_key, content_key, error_key):
+    """Callback: Fetches remote content and pre-populates relation forms safely before widget instantiation."""
+    url = st.session_state.get(url_key, "").strip()
+    if not url:
+        st.session_state[error_key] = "Please enter a URL first."
+        return
+    try:
+        fetched_data = fetch_remote_content(url)
+        st.session_state[content_key] = fetched_data
+        
+        url_path = url.split("?")[0]
+        filename_from_url = os.path.basename(url_path)
+        
+        st.session_state[alias_key] = filename_from_url
+        st.session_state[name_key] = filename_from_url.split(".")[0]
+        
+        if filename_from_url.endswith(".md"):
+            st.session_state[storage_key] = "Markdown Text"
+            fetch_name, fetch_desc, fetch_tags, _ = parse_frontmatter(fetched_data)
+            if fetch_name: st.session_state[name_key] = fetch_name
+            if fetch_desc: st.session_state[desc_key] = fetch_desc
+            if fetch_tags: st.session_state[tags_key] = fetch_tags
+        else:
+            st.session_state[storage_key] = "Real File Upload"
+            
+        st.session_state[error_key] = None
+    except Exception as e:
+        st.session_state[error_key] = f"❌ Failed to fetch URL: {e}"
+
 def load_file_content():
     """Callback: Safely reads uploaded text file into the form and parses frontmatter."""
     if st.session_state.get("skills_uploader") is not None:
@@ -234,37 +263,25 @@ def render():
                             import_rel_alias = st.text_input("Relation Filename / Alias", key=f"import_alias_Skills_{item['id']}")
                             
                             # Button to fetch
-                            if st.button("Fetch & Pre-fill URL Content", key=f"btn_fetch_url_Skills_{item['id']}"):
-                                if not import_url.strip():
-                                    st.error("Please enter a URL first.")
-                                else:
-                                    try:
-                                        fetched_data = fetch_remote_content(import_url)
-                                        st.session_state[f"fetched_content_Skills_{item['id']}"] = fetched_data
-                                        
-                                        url_path = import_url.split("?")[0]
-                                        filename_from_url = os.path.basename(url_path)
-                                        
-                                        # Deduce extension & alias from URL if not specified
-                                        if not import_rel_alias:
-                                            st.session_state[f"import_alias_Skills_{item['id']}"] = filename_from_url
-                                        if not child_name:
-                                            st.session_state[f"import_name_Skills_{item['id']}"] = filename_from_url.split(".")[0]
-                                            
-                                        # If markdown
-                                        if filename_from_url.endswith(".md"):
-                                            st.session_state[f"import_storage_Skills_{item['id']}"] = "Markdown Text"
-                                            fetch_name, fetch_desc, fetch_tags, _ = parse_frontmatter(fetched_data)
-                                            if fetch_name: st.session_state[f"import_name_Skills_{item['id']}"] = fetch_name
-                                            if fetch_desc: st.session_state[f"import_desc_Skills_{item['id']}"] = fetch_desc
-                                            if fetch_tags: st.session_state[f"import_tags_Skills_{item['id']}"] = fetch_tags
-                                        else:
-                                            st.session_state[f"import_storage_Skills_{item['id']}"] = "Real File Upload"
-                                            
-                                        st.success("Successfully fetched remote URL! Pre-filled details below.")
-                                        st.rerun()
-                                    except Exception as err:
-                                        st.error(f"Error fetching URL: {err}")
+                            st.button(
+                                "Fetch & Pre-fill URL Content", 
+                                key=f"btn_fetch_url_Skills_{item['id']}", 
+                                on_click=perform_relation_fetch, 
+                                args=(
+                                    f"import_url_Skills_{item['id']}",
+                                    f"import_name_Skills_{item['id']}",
+                                    f"import_storage_Skills_{item['id']}",
+                                    f"import_desc_Skills_{item['id']}",
+                                    f"import_tags_Skills_{item['id']}",
+                                    f"import_alias_Skills_{item['id']}",
+                                    f"fetched_content_Skills_{item['id']}",
+                                    f"error_fetch_Skills_{item['id']}"
+                                )
+                            )
+                            
+                            error_err = st.session_state.get(f"error_fetch_Skills_{item['id']}")
+                            if error_err:
+                                st.error(error_err)
                                         
                             fetched_content = st.session_state.get(f"fetched_content_Skills_{item['id']}")
                             if fetched_content:
