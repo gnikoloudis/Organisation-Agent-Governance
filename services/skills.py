@@ -120,3 +120,18 @@ def remove_skill_relation(skill_id, child_id, relation_type, relation_alias):
     else:
         from core.skills import remove_skill_relation as core_remove_rel
         core_remove_rel(skill_id, child_id, relation_type, relation_alias)
+
+def update_skill_relation(skill_id, child_id, old_type, old_alias, new_type, new_alias):
+    if STREAMLIT_MODE == "api":
+        payload = {
+            "child_id": child_id,
+            "old_type": old_type,
+            "old_alias": old_alias,
+            "new_type": new_type,
+            "new_alias": new_alias
+        }
+        response = httpx2.put(f"{API_BASE_URL}/api/skills/{skill_id}/relations", json=payload)
+        handle_response(response)
+    else:
+        from core.skills import update_skill_relation as core_update
+        core_update(skill_id, child_id, old_type, old_alias, new_type, new_alias)

@@ -369,9 +369,9 @@ def test_relations_and_hierarchical_export():
     assert resp_del_child.status_code == 422
     assert "referenced in a relationship" in resp_del_child.json()["detail"]
 
-    # 8. Export the parent skill
+    # 8. Export parent and child skills/rules (child items should be skipped at root)
     export_payload = {
-        "selected_ids": [parent_id],
+        "selected_ids": [parent_id, child_rule_id, child_code_id],
         "base_path": ".agent_test"
     }
     resp_export = client.post("/api/exporter/run", json=export_payload)
@@ -387,12 +387,44 @@ def test_relations_and_hierarchical_export():
     assert os.path.exists(rule_rel_path)
     assert os.path.exists(code_rel_path)
 
+    # Assert that children are NOT exported at the root level
+    child_rule_root_path = os.path.join(".agent_test", "rules", "style_guide_rule")
+    child_code_root_path = os.path.join(".agent_test", "skills", "dev_helper_code")
+    assert not os.path.exists(child_rule_root_path)
+    assert not os.path.exists(child_code_root_path)
+
     with open(code_rel_path, "r", encoding="utf-8") as f:
         code_content = f.read()
     assert "def helper():" in code_content
 
-    # 9. Delete relationship link, then check that deletion of child is now allowed
-    resp_remove_link = client.request("DELETE", f"/api/skills/{parent_id}/relations", json=link_rule_payload)
+    # 8.5 Test relation update (PUT)
+    update_payload = {
+        "child_id": child_rule_id,
+        "old_type": "reference",
+        "old_alias": "style_guide.md",
+        "new_type": "resources",
+        "new_alias": "new_style_guide.md"
+    }
+    resp_update = client.put(f"/api/skills/{parent_id}/relations", json=update_payload)
+    assert resp_update.status_code == 200
+    
+    # Verify relations updated
+    resp_get_rels = client.get(f"/api/skills/{parent_id}/relations")
+    assert resp_get_rels.status_code == 200
+    relations_after_update = resp_get_rels.json()
+    aliases = [r["relation_alias"] for r in relations_after_update]
+    types = [r["relation_type"] for r in relations_after_update]
+    assert "new_style_guide.md" in aliases
+    assert "style_guide.md" not in aliases
+    assert "resources" in types
+
+    # 9. Delete relationship link (using the updated alias/type), then check that deletion of child is now allowed
+    link_rule_payload_updated = {
+        "child_id": child_rule_id,
+        "relation_type": "resources",
+        "relation_alias": "new_style_guide.md"
+    }
+    resp_remove_link = client.request("DELETE", f"/api/skills/{parent_id}/relations", json=link_rule_payload_updated)
     assert resp_remove_link.status_code == 200
 
     resp_del_child_allowed = client.delete(f"/api/rules/{child_rule_id}")

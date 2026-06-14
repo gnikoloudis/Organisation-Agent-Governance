@@ -150,14 +150,23 @@ def render():
         st.subheader("Active Assets under Rules")
         try:
             items = get_rules()
+            from database.db_manager import get_relations, get_customizations
+            all_customizations = get_customizations()
+            child_ids = set()
+            for custom_item in all_customizations:
+                if custom_item['category'] in ["Skills", "Rules"]:
+                    rels = get_relations(custom_item['id'])
+                    for r in rels:
+                        child_ids.add(r['child_id'])
+            root_items = [i for i in items if i['id'] not in child_ids]
         except Exception as e:
             st.error(f"Error loading rules: {e}")
-            items = []
+            root_items = []
         
-        if not items:
+        if not root_items:
             st.info("No records found in this category yet.")
         else:
-            for item in items:
+            for item in root_items:
                 with st.container(border=True):
                     col1, col2 = st.columns([4, 1])
                     with col1:
@@ -184,7 +193,7 @@ def render():
                         st.download_button("⬇️ Download File", data=item['file_blob'], file_name=item['file_name'], key=f"dl_Rules_{item['id']}")
 
                     # --- RELATIONSHIPS EXPANDER ---
-                    with st.expander("🔗 Related References, Assets & Tools"):
+                    with st.expander("🔗 Related References, Resources Assets & Tools"):
                         try:
                             relations = get_rule_relations(item['id'])
                         except Exception as e:
@@ -195,26 +204,125 @@ def render():
                             st.markdown("##### **Current Relations**")
                             for rel in relations:
                                 child_asset = rel["child_asset"]
-                                col_r1, col_r2, col_r3 = st.columns([3, 2, 1])
-                                with col_r1:
-                                    st.markdown(f"**[{child_asset['category']}] {child_asset['name']}**")
-                                    st.caption(f"Alias: `{rel['relation_alias']}` | Type: `{rel['relation_type']}`")
-                                with col_r2:
-                                    if child_asset.get("type") == "Real File Upload" and child_asset.get("file_blob"):
+                                with st.container(border=True):
+                                    col_c1, col_c2 = st.columns([4, 1])
+                                    with col_c1:
+                                        st.markdown(f"###### ↳ 🔗 **{child_asset['name']}** `[{child_asset['type']}]`")
+                                        st.caption(f"Alias: `{rel['relation_alias']}` | Type: `{rel['relation_type'].capitalize()}`")
+                                        if child_asset['tags']:
+                                            st.markdown(" ".join([f"`{t.strip().lower()}`" for t in child_asset['tags'].split(",") if t.strip()]))
+                                    with col_c2:
+                                        if st.button("🗑️ Delete Link", key=f"del_link_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"):
+                                            try:
+                                                remove_rule_relation(item['id'], child_asset['id'], rel['relation_type'], rel['relation_alias'])
+                                                st.success("Relation removed!")
+                                                st.rerun()
+                                            except Exception as err:
+                                                st.error(f"Error: {err}")
+                                                
+                                    st.markdown(f"**Description:** \n{child_asset['description']}")
+                                    
+                                    # Preview and Download
+                                    if child_asset['type'] in ["Markdown Text", "Real File Upload"] and child_asset['content']:
+                                        with st.expander("📝 Preview Content"):
+                                            st.markdown(child_asset['content'])
+                                    elif child_asset['type'] == "Web Bookmark":
+                                        display_text = child_asset['description'] if child_asset['description'] else child_asset['name']
+                                        st.markdown(f"🔗 **Bookmark Link:** <a href='{child_asset['content']}' target='_blank'>{display_text}</a>", unsafe_allow_html=True)
+                                        
+                                    if child_asset['type'] == "Real File Upload" and child_asset.get('file_blob'):
                                         st.download_button(
                                             "⬇️ Download File", 
-                                            data=child_asset["file_blob"], 
-                                            file_name=child_asset["file_name"] or rel['relation_alias'], 
-                                            key=f"dl_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_alias']}"
+                                            data=child_asset['file_blob'], 
+                                            file_name=child_asset['file_name'] or rel['relation_alias'], 
+                                            key=f"dl_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
                                         )
-                                with col_r3:
-                                    if st.button("🗑️ Delete Link", key=f"del_link_Rules_{item['id']}_{child_asset['id']}_{rel['relation_alias']}"):
-                                        try:
-                                            remove_rule_relation(item['id'], child_asset['id'], rel['relation_type'], rel['relation_alias'])
-                                            st.success("Relation removed!")
-                                            st.rerun()
-                                        except Exception as err:
-                                            st.error(f"Error: {err}")
+                                        
+                                    # Edit relation details
+                                    with st.expander("✏️ Edit Relation Details"):
+                                        c_name_key = f"edit_name_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
+                                        c_desc_key = f"edit_desc_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
+                                        c_text_key = f"edit_content_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
+                                        c_tags_key = f"edit_tags_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
+                                        
+                                        c_type_key = f"edit_type_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
+                                        c_alias_key = f"edit_alias_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}"
+                                        
+                                        if c_name_key not in st.session_state: st.session_state[c_name_key] = child_asset['name']
+                                        if c_desc_key not in st.session_state: st.session_state[c_desc_key] = child_asset['description']
+                                        if c_text_key not in st.session_state: st.session_state[c_text_key] = child_asset['content'] or ""
+                                        if c_tags_key not in st.session_state: st.session_state[c_tags_key] = child_asset['tags']
+                                        
+                                        if c_type_key not in st.session_state: st.session_state[c_type_key] = rel['relation_type']
+                                        if c_alias_key not in st.session_state: st.session_state[c_alias_key] = rel['relation_alias']
+                                        
+                                        # Relationship Metadata Section
+                                        c_new_type = st.selectbox(
+                                            "Relationship Type", 
+                                            options=["reference", "asset", "tool", "resources"], 
+                                            key=c_type_key
+                                        )
+                                        c_new_alias = st.text_input("Relation Filename / Alias", key=c_alias_key)
+                                        
+                                        st.divider()
+                                        st.markdown("**Asset Details**")
+                                        
+                                        c_new_name = st.text_input("Asset Name", key=c_name_key)
+                                        c_new_desc = st.text_area("Description", key=c_desc_key)
+                                        c_new_tags = st.text_input("Tags", key=c_tags_key)
+                                        c_new_content = child_asset['content']
+                                        
+                                        c_new_file_bytes = None
+                                        c_new_file_name = None
+                                        
+                                        if child_asset['type'] in ["Markdown Text", "Real File Upload"]:
+                                            c_new_content = st.text_area("Markdown Code / Text Editor", height=150, key=c_text_key)
+                                            if child_asset['type'] == "Real File Upload":
+                                                st.markdown(f"📄 **Current File:** `{child_asset.get('file_name', 'Unknown File')}`")
+                                                c_new_file = st.file_uploader("Upload New File to Replace", key=f"edit_file_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}")
+                                                if c_new_file is not None:
+                                                    c_new_file_bytes = c_new_file.read()
+                                                    c_new_file_name = c_new_file.name
+                                        elif child_asset['type'] == "Web Bookmark":
+                                            c_new_content = st.text_input("URL", value=child_asset['content'], key=f"edit_url_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}")
+                                            
+                                        if st.button("💾 Save Changes", key=f"save_edit_rel_Rules_{item['id']}_{child_asset['id']}_{rel['relation_type']}_{rel['relation_alias']}", type="secondary"):
+                                            try:
+                                                from services.skills import update_skill
+                                                if child_asset['category'] == "Skills":
+                                                    update_skill(
+                                                        item_id=child_asset['id'],
+                                                        name=c_new_name,
+                                                        content=c_new_content,
+                                                        description=c_new_desc,
+                                                        tags=c_new_tags,
+                                                        file_blob=c_new_file_bytes,
+                                                        file_name=c_new_file_name
+                                                    )
+                                                else:
+                                                    update_rule(
+                                                        item_id=child_asset['id'],
+                                                        name=c_new_name,
+                                                        content=c_new_content,
+                                                        description=c_new_desc,
+                                                        tags=c_new_tags,
+                                                        file_blob=c_new_file_bytes,
+                                                        file_name=c_new_file_name
+                                                    )
+                                                
+                                                from services.rules import update_rule_relation
+                                                update_rule_relation(
+                                                    rule_id=item['id'],
+                                                    child_id=child_asset['id'],
+                                                    old_type=rel['relation_type'],
+                                                    old_alias=rel['relation_alias'],
+                                                    new_type=c_new_type,
+                                                    new_alias=c_new_alias
+                                                )
+                                                st.success("✅ Relation and Asset updated successfully!")
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"❌ {e}")
                         else:
                             st.info("No relations linked to this Rule yet.")
                             
@@ -241,7 +349,7 @@ def render():
                                 )
                                 selected_candidate = next(c for c in candidates if c['name'] == selected_candidate_name)
                                 
-                                rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool"], key=f"cand_type_Rules_{item['id']}")
+                                rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool","resources"], key=f"cand_type_Rules_{item['id']}")
                                 
                                 # Default alias based on child file_name or sanitized name
                                 default_alias = selected_candidate.get("file_name") or f"{selected_candidate['name'].replace(' ', '_').lower()}.md"
@@ -265,7 +373,7 @@ def render():
                             child_tags = st.text_input("Category Tags (comma-separated)", key=f"import_tags_Rules_{item['id']}")
                             
                             # Relation fields
-                            import_rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool"], key=f"import_type_Rules_{item['id']}")
+                            import_rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool","resources"], key=f"import_type_Rules_{item['id']}")
                             import_rel_alias = st.text_input("Relation Filename / Alias", key=f"import_alias_Rules_{item['id']}")
                             
                             # Button to fetch

@@ -120,3 +120,18 @@ def remove_rule_relation(rule_id, child_id, relation_type, relation_alias):
     else:
         from core.rules import remove_rule_relation as core_remove_rel
         core_remove_rel(rule_id, child_id, relation_type, relation_alias)
+
+def update_rule_relation(rule_id, child_id, old_type, old_alias, new_type, new_alias):
+    if STREAMLIT_MODE == "api":
+        payload = {
+            "child_id": child_id,
+            "old_type": old_type,
+            "old_alias": old_alias,
+            "new_type": new_type,
+            "new_alias": new_alias
+        }
+        response = httpx2.put(f"{API_BASE_URL}/api/rules/{rule_id}/relations", json=payload)
+        handle_response(response)
+    else:
+        from core.rules import update_rule_relation as core_update
+        core_update(rule_id, child_id, old_type, old_alias, new_type, new_alias)

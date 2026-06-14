@@ -83,6 +83,13 @@ class RelationCreate(BaseModel):
     relation_type: str
     relation_alias: str
 
+class RelationUpdate(BaseModel):
+    child_id: int
+    old_type: str
+    old_alias: str
+    new_type: str
+    new_alias: str
+
 class RelationResponse(BaseModel):
     parent_id: int
     child_id: int
@@ -229,6 +236,12 @@ def delete_skill_relation_api(item_id: int, payload: RelationCreate):
     remove_skill_relation(item_id, payload.child_id, payload.relation_type, payload.relation_alias)
     return {"detail": "Relation deleted successfully."}
 
+@app.put("/api/skills/{item_id}/relations", tags=["Skills"])
+def update_skill_relation_api(item_id: int, payload: RelationUpdate):
+    from core.skills import update_skill_relation
+    update_skill_relation(item_id, payload.child_id, payload.old_type, payload.old_alias, payload.new_type, payload.new_alias)
+    return {"detail": "Relation updated successfully."}
+
 
 # ==========================================
 # RULES ENDPOINTS
@@ -304,6 +317,12 @@ def delete_rule_relation_api(item_id: int, payload: RelationCreate):
     from core.rules import remove_rule_relation
     remove_rule_relation(item_id, payload.child_id, payload.relation_type, payload.relation_alias)
     return {"detail": "Relation deleted successfully."}
+
+@app.put("/api/rules/{item_id}/relations", tags=["Rules"])
+def update_rule_relation_api(item_id: int, payload: RelationUpdate):
+    from core.rules import update_rule_relation
+    update_rule_relation(item_id, payload.child_id, payload.old_type, payload.old_alias, payload.new_type, payload.new_alias)
+    return {"detail": "Relation updated successfully."}
 
 
 # ==========================================

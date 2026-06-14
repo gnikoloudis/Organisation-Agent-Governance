@@ -7,8 +7,23 @@ def export_assets(selected_items, base_path):
     if not base_path:
         raise AssetValidationError("Please specify a target directory.")
         
+    selected_ids = {item['id'] for item in selected_items}
+    child_ids_to_skip = set()
+    
+    from database.db_manager import get_relations
+    for item in selected_items:
+        if item['category'] in ["Skills", "Rules"]:
+            relations = get_relations(item['id'])
+            for rel in relations:
+                child_id = rel.get('child_id')
+                if child_id in selected_ids:
+                    child_ids_to_skip.add(child_id)
+        
     exported_paths = []
     for item in selected_items:
+        if item['id'] in child_ids_to_skip:
+            continue
+            
         if item['type'] == "Web Bookmark":
             continue
             

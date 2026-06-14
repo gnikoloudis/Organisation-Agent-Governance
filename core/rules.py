@@ -106,8 +106,8 @@ def get_rule_relations(rule_id):
 
 def add_rule_relation(rule_id, child_id, relation_type, relation_alias):
     """Links a child customization to the parent rule."""
-    if relation_type not in ["reference", "asset", "tool"]:
-        raise AssetValidationError("Relation type must be 'reference', 'asset', or 'tool'.")
+    if relation_type not in ["reference", "asset", "tool","resources"]:
+        raise AssetValidationError("Relation type must be 'reference', 'resources', 'asset', or 'tool'.")
         
     relation_alias = relation_alias.strip() if relation_alias else ""
     if not relation_alias:
@@ -139,3 +139,23 @@ def remove_rule_relation(rule_id, child_id, relation_type, relation_alias):
     """Removes a relationship link between a parent rule and a child."""
     get_rule_by_id(rule_id)
     delete_relation(rule_id, child_id, relation_type, relation_alias)
+
+def update_rule_relation(rule_id, child_id, old_type, old_alias, new_type, new_alias):
+    """Updates the relationship type and/or alias between parent rule and child customization."""
+    new_type = new_type.strip()
+    new_alias = new_alias.strip()
+    
+    if new_type not in ["reference", "asset", "tool", "resources"]:
+        raise AssetValidationError("Relation type must be 'reference', 'resources', 'asset', or 'tool'.")
+    if not new_alias:
+        raise AssetValidationError("Relation alias/filename cannot be empty.")
+        
+    get_rule_by_id(rule_id)
+    
+    if old_type != new_type or old_alias != new_alias:
+        delete_relation(rule_id, child_id, old_type, old_alias)
+        try:
+            add_relation(rule_id, child_id, new_type, new_alias)
+        except Exception as e:
+            add_relation(rule_id, child_id, old_type, old_alias)
+            raise AssetValidationError(f"Could not update relationship. It might already exist: {e}")
