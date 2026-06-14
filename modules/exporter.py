@@ -25,6 +25,7 @@ def render():
     for item in exportable:
         if item['category'] in ["Skills", "Rules"]:
             rels = get_relations(item['id'])
+            rels = sorted(rels, key=lambda r: (r['relation_type'].lower(), r['relation_alias'].lower()))
             relations_map[item['id']] = rels
             for rel in rels:
                 if rel['child_id'] in exportable_ids:
@@ -40,6 +41,7 @@ def render():
     categories = ["Skills", "Rules", "Workflows", "MCP Services"]
     for cat in categories:
         cat_items = [i for i in root_items if i['category'] == cat]
+
         if not cat_items:
             continue
             
