@@ -104,7 +104,7 @@ The system supports creating, managing, and exporting parent-child relationships
 
 ### Features
 * **Relation Mapping**: Link a parent Skill or Rule to other child Skills or Rules.
-* **Relation Types**: Categorize relations as `"reference"`, `"asset"`, `"tool"`, or `"resources"`.
+* **Relation Types**: Categorize relations as `"reference"`, `"asset"`, `"tool"`, `"resources"`, or `"scripts"`.
 * **User-Defined Aliases**: Assign custom filenames/aliases (e.g. `utils.py`, `config.json`, `setup.sh`) to the related items.
 * **Deletion Protection**: To preserve referential integrity, any customization that is currently referenced as a child in an active relationship cannot be deleted. Deleting a parent automatically cleans up its outgoing relations.
 * **Hierarchical Exporting**: When you export a parent Skill or Rule, the Exporter automatically packages all linked children into structured subdirectories:
@@ -112,6 +112,7 @@ The system supports creating, managing, and exporting parent-child relationships
   - `base_path/skills/{parent_name}/assets/{alias_name}`
   - `base_path/skills/{parent_name}/tools/{alias_name}`
   - `base_path/skills/{parent_name}/resources/{alias_name}`
+  - `base_path/skills/{parent_name}/scripts/{alias_name}`
   - **Deduplicated Selection**: In the Exporter UI, only parent/root assets are selectable. Their child assets are listed nested underneath for user information. If a child asset is linked to any selected parent, the Exporter automatically skips exporting it at the root level to avoid duplicates, while still packaging it nested under the parent directory.
 * **Relationship Management in View Tab**: In the Skills and Rules active lists, only root assets are displayed at the top level. The related items are nested underneath them in sub-cards. Under **Edit Relation Details**, you can preview, download, or edit the child asset itself, as well as change the relationship metadata (Type and Alias/Filename) directly from inside the parent.
 * **Remote URL Imports**: Under the relationship panel, you can import new related items directly from remote URLs:

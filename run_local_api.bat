@@ -5,7 +5,7 @@ echo Starting FastAPI REST API backend on port 8080...
 echo =======================================================
 
 :: Start the FastAPI server in a new window
-start "FastAPI Backend" .\.venv\Scripts\uvicorn main_api:app --host 127.0.0.1 --port 8080
+start "FastAPI Backend" .\.venv\Scripts\uvicorn main_api:app --host 127.0.0.1 --port 8080 --reload
 
 :: Give the FastAPI server a few seconds to spin up and bind to port 8080
 echo Waiting for API backend to initialize...

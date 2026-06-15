@@ -106,8 +106,8 @@ def get_skill_relations(skill_id):
 
 def add_skill_relation(skill_id, child_id, relation_type, relation_alias):
     """Links a child customization to the parent skill."""
-    if relation_type not in ["reference", "asset", "tool", "resources"]:
-        raise AssetValidationError("Relation type must be 'reference', 'resources', 'asset', or 'tool'.")
+    if relation_type not in ["reference", "asset", "tool", "resources","scripts"]:
+        raise AssetValidationError("Relation type must be 'reference', 'resources', 'asset', 'tool','scripts'.")
         
     relation_alias = relation_alias.strip() if relation_alias else ""
     if not relation_alias:
@@ -145,8 +145,8 @@ def update_skill_relation(skill_id, child_id, old_type, old_alias, new_type, new
     new_type = new_type.strip()
     new_alias = new_alias.strip()
     
-    if new_type not in ["reference", "asset", "tool", "resources"]:
-        raise AssetValidationError("Relation type must be 'reference', 'resources', 'asset', or 'tool'.")
+    if new_type not in ["reference", "asset", "tool", "resources", "scripts"]:
+        raise AssetValidationError("Relation type must be 'reference', 'resources', 'asset', 'tool','scripts'.")
     if not new_alias:
         raise AssetValidationError("Relation alias/filename cannot be empty.")
         

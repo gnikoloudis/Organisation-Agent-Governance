@@ -1,4 +1,4 @@
-import os
+    import os
 import sys
 import base64
 import shutil
@@ -279,7 +279,7 @@ def test_exporter_run_success():
     assert len(data["exported_files"]) == 2
     
     # Verify physical file existence
-    skill_path = os.path.join(".agent_test", "skills", "export_skill", "export_skill.md")
+    skill_path = os.path.join(".agent_test", "skills", "export_skill", "SKILLS.md")
     rule_path = os.path.join(".agent_test", "rules", "export_rule", "export_rule.md")
     assert os.path.exists(skill_path)
     assert os.path.exists(rule_path)
@@ -379,7 +379,7 @@ def test_relations_and_hierarchical_export():
     exported_files = resp_export.json()["exported_files"]
 
     # Verify folder structure
-    parent_path = os.path.join(".agent_test", "skills", "developer_skill", "developer_skill.md")
+    parent_path = os.path.join(".agent_test", "skills", "developer_skill", "SKILLS.md")
     rule_rel_path = os.path.join(".agent_test", "skills", "developer_skill", "references", "style_guide.md")
     code_rel_path = os.path.join(".agent_test", "skills", "developer_skill", "assets", "helper.py")
 
@@ -402,7 +402,7 @@ def test_relations_and_hierarchical_export():
         "child_id": child_rule_id,
         "old_type": "reference",
         "old_alias": "style_guide.md",
-        "new_type": "resources",
+        "new_type": "scripts",
         "new_alias": "new_style_guide.md"
     }
     resp_update = client.put(f"/api/skills/{parent_id}/relations", json=update_payload)
@@ -416,12 +416,12 @@ def test_relations_and_hierarchical_export():
     types = [r["relation_type"] for r in relations_after_update]
     assert "new_style_guide.md" in aliases
     assert "style_guide.md" not in aliases
-    assert "resources" in types
+    assert "scripts" in types
 
     # 9. Delete relationship link (using the updated alias/type), then check that deletion of child is now allowed
     link_rule_payload_updated = {
         "child_id": child_rule_id,
-        "relation_type": "resources",
+        "relation_type": "scripts",
         "relation_alias": "new_style_guide.md"
     }
     resp_remove_link = client.request("DELETE", f"/api/skills/{parent_id}/relations", json=link_rule_payload_updated)

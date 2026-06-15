@@ -36,7 +36,9 @@ def export_assets(selected_items, base_path):
         os.makedirs(target_dir, exist_ok=True)
         
         extension = ".json" if item['category'] == "MCP Services" else ".md"
-        file_path = os.path.join(target_dir, f"{safe_name}{extension}")
+        
+        filename = "SKILL" if item['category'] == "Skills" else safe_name
+        file_path = os.path.join(target_dir, f"{filename}{extension}")
         
         content = item['file_blob'] if item['file_blob'] else item['content']
         content = content or ""
@@ -63,7 +65,10 @@ def export_assets(selected_items, base_path):
                 rel_dir = os.path.join(target_dir, plural_type)
                 os.makedirs(rel_dir, exist_ok=True)
                 
-                rel_alias = rel['relation_alias']
+                if item['category'] == "Scripts":
+                    rel_alias = "SKILL.md"
+                else:
+                    rel_alias = rel['relation_alias']
                 rel_file_path = os.path.join(rel_dir, rel_alias)
                 
                 rel_content = rel['file_blob'] if rel['file_blob'] else rel['content']

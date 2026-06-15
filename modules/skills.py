@@ -252,7 +252,7 @@ def render():
                                         # Relationship Metadata Section
                                         c_new_type = st.selectbox(
                                             "Relationship Type", 
-                                            options=["reference", "asset", "tool", "resources"], 
+                                            options=["reference", "asset", "tool", "resources", "scripts"], 
                                             key=c_type_key
                                         )
                                         c_new_alias = st.text_input("Relation Filename / Alias", key=c_alias_key)
@@ -343,7 +343,7 @@ def render():
                                 )
                                 selected_candidate = next(c for c in candidates if c['name'] == selected_candidate_name)
                                 
-                                rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool","resources"], key=f"cand_type_Skills_{item['id']}")
+                                rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool","resources","scripts"], key=f"cand_type_Skills_{item['id']}")
                                 
                                 # Default alias based on child file_name or sanitized name
                                 default_alias = selected_candidate.get("file_name") or f"{selected_candidate['name'].replace(' ', '_').lower()}.md"
@@ -367,7 +367,7 @@ def render():
                             child_tags = st.text_input("Category Tags (comma-separated)", key=f"import_tags_Skills_{item['id']}")
                             
                             # Relation fields
-                            import_rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool","resources"], key=f"import_type_Skills_{item['id']}")
+                            import_rel_type = st.selectbox("Relation Type", ["reference", "asset", "tool","resources","scripts"], key=f"import_type_Skills_{item['id']}")
                             import_rel_alias = st.text_input("Relation Filename / Alias", key=f"import_alias_Skills_{item['id']}")
                             
                             # Button to fetch
